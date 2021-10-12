@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <string>
 using namespace std;
 
 
@@ -19,7 +20,14 @@ char** vec_to_char_array(vector<string>& parts) {
     return result;
 }
 vector<string> split(string line, string separator = " ") {
-
+    line = trim(line);
+    vector<string> input;
+    size_t start, end = 0;
+    while((start = line.find_first_not_of(separator, end)) != string::npos) {   //matches
+        end = line.find(separator, start);
+        input.push_back(line.substr(start, end-start));     //gets the substring
+    }
+    return input;
 }
 
 int main () {
