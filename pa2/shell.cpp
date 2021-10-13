@@ -4,15 +4,35 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <string>
 using namespace std;
 
 
-string trim(string input) {
-
+string trim(string input) { //trims out the white space
+    int i = 0;
+    string trimmed;
+    //left trim
+    while(i < input.length() && input[i] == ' ') {
+        i++;
+        if(i < input.length()) {
+            trimmed = input.substr(i);
+        } else {
+            trimmed = "";
+        }
+    }
+    //right trim
+    int j = input.size() - 1;
+    while(j >=0 && input[j] == ' ') {
+        j--;
+        if(j >= 0) {
+            trimmed = input.substr(0, i+1);
+        } else {
+            trimmed = "";
+        }
+    }
+    return trimmed;
 }
 char** vec_to_char_array(vector<string>& parts) {
-    char ** result = new char * [parts.size() + 1]; //add 1 for the 
+    char ** result = new char * [parts.size() + 1]; //add 1 for the NULL pointer at the end
     for(int i = 0; i<parts.size(); i++) {
         result[i] = (char*) parts[i].c_str();
     }
