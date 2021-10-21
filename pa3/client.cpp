@@ -10,8 +10,9 @@ int main(int argc, char *argv[]){
 	double t = -0.1;
 	int e = -1;
 	string filename = "";
+	int buffercapacity = MAX_MESSAGE; //maximum bc we don't want to use uneccessary requests
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "p:t:e:f:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:")) != -1) {
 		switch (opt) {
 			case 'f':
 				filename = optarg;
@@ -24,6 +25,9 @@ int main(int argc, char *argv[]){
 				break;
 			case 'e':
 				e = atoi(optarg);
+				break;
+			case 'm':
+				buffercapacity = atoi(optarg);
 				break;
 		}
 	}
