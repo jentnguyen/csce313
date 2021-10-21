@@ -7,14 +7,23 @@ int main(int argc, char *argv[]){
 
 	int opt;
 	int p = 1;
-	double t = 0.0;
-	int e = 1;
+	double t = -0.1;
+	int e = -1;
 	string filename = "";
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "f:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:")) != -1) {
 		switch (opt) {
 			case 'f':
 				filename = optarg;
+				break;
+			case 'p':
+				p = atoi(optarg); //"1"
+				break;
+			case 't':
+				t = atof(optarg);
+				break;
+			case 'e':
+				e = atoi(optarg);
 				break;
 		}
 	}
@@ -30,6 +39,29 @@ int main(int argc, char *argv[]){
 		}
 	}
 	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
+	if(t == -0.1 && e == -1) {
+		for(int i = 0; i < 1000; i++) {
+			DataRequest d (p, i*0.004, 1);
+			chan.cwrite (&d, sizeof (DataRequest)); // question
+			double reply;
+			chan.cread (&reply, sizeof(double)); //answer
+			if (isValidResponse(&reply)){
+				exit(0);
+				//cout << "For person " << p <<", at time " << t << ", the value of ecg "<< e <<" is " << reply << endl;
+			}
+		}
+		for(int i = 0; i < 1000; i++) {
+			DataRequest d (p, i*0.004, 2);
+			chan.cwrite (&d, sizeof (DataRequest)); // question
+			double reply;
+			chan.cread (&reply, sizeof(double)); //answer
+			if (isValidResponse(&reply)){
+				exit(0);
+				//cout << "For person " << p <<", at time " << t << ", the value of ecg "<< e <<" is " << reply << endl;
+			}
+		}
+	}
+
 	DataRequest d (p, t, e);
 	chan.cwrite (&d, sizeof (DataRequest)); // question
 	double reply;
