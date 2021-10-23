@@ -11,8 +11,10 @@ int main(int argc, char *argv[]){
 	int e = -1;
 	string filename = "";
 	int buffercapacity = MAX_MESSAGE; //maximum bc we don't want to use uneccessary requests
+	string bcapstring = "";
+	bool isNewChan = false;
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "p:t:e:f:m:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:c")) != -1) {
 		switch (opt) {
 			case 'f':
 				filename = optarg;
@@ -27,7 +29,11 @@ int main(int argc, char *argv[]){
 				e = atoi(optarg);
 				break;
 			case 'm':
+				bcapstring = optarg;
 				buffercapacity = atoi(optarg);
+				break;
+			case 'c':
+				isNewChan = true;
 				break;
 		}
 	}
@@ -37,7 +43,7 @@ int main(int argc, char *argv[]){
 		EXITONERROR ("Could not create a child process for running the server");
 	}
 	if (!pid){ // The server runs in the child process
-		char* args[] = {"./server", nullptr};
+		char* args[] = {"./server", "-m", (char*)bcapstring.c_str(), nullptr};
 		if (execvp(args[0], args) < 0){
 			EXITONERROR ("Could not launch the server");
 		}
@@ -90,8 +96,31 @@ int main(int argc, char *argv[]){
 	if (isValidResponse(&filelen)){
 		cout << "File length is: " << filelen << " bytes" << endl;
 	}
-	
-	
+
+	int64 rem = filelen;
+	char buf[len];
+	FileRequest* f = (FileRequest*) buf;
+	ofstream of (filename);
+	char recvbuf[buffercapacity];
+	while (rem > 0) { //while the remaining is greater than 0
+		f->length = min(rem, (int64)buffercapacity);
+		chan.cwrite(buf2, len);
+		chan.cread(recvbuf, buffercapacity);
+		of.write(recvbuf, f->length);
+		rem -= f->length;
+	}
+	if(isNewChan) {
+		Request nc (NEWCHAN_REQ_TYPE);
+		chan.cwrite(&nc, sizeof(nc));
+		char chanName[1024];
+		chan.cread(chanName, sizeof(chanName));
+
+		FIFORequestChannel newchan (chanName, FIFORequestChannel::CLIENT_SIDE);
+
+		Request q (QUIT_REQ_TYPE);
+    	chan.cwrite (&q, sizeof (Request));
+	}
+
 	// closing the channel    
     Request q (QUIT_REQ_TYPE);
     chan.cwrite (&q, sizeof (Request));
