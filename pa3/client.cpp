@@ -6,15 +6,15 @@ using namespace std;
 int main(int argc, char *argv[]){
 
 	int opt;
-	int p = 1;
+	int p = 0;
 	double t = -0.1;
 	int e = -1;
-	string filename = "";
+	string filename = "\0";
 	int buffercapacity = MAX_MESSAGE; //maximum bc we don't want to use uneccessary requests
 	string bcapstring = "";
 	bool isNewChan = false;
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "p:t:e:f:m:c")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:c::")) != -1) {
 		switch (opt) {
 			case 'f':
 				filename = optarg;
@@ -49,29 +49,31 @@ int main(int argc, char *argv[]){
 		}
 	}
 	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
-	if(t == -0.1 && e == -1) {
+	if(t == -0.1 && e == -1 && p!=0) {
 		for(int i = 0; i < 1000; i++) {
 			DataRequest d (p, i*0.004, 1);
 			chan.cwrite (&d, sizeof (DataRequest)); // question
 			double reply;
 			chan.cread (&reply, sizeof(double)); //answer
-			if (isValidResponse(&reply)){
+			cout << "For person " << p <<", at time " << i*0.004 << ", the value of ecg "<< 1 <<" is " << reply << endl;
+
+			if (!isValidResponse(&reply)){
 				exit(0);
-				//cout << "For person " << p <<", at time " << t << ", the value of ecg "<< e <<" is " << reply << endl;
 			}
+			
 		}
 		for(int i = 0; i < 1000; i++) {
 			DataRequest d (p, i*0.004, 2);
 			chan.cwrite (&d, sizeof (DataRequest)); // question
 			double reply;
 			chan.cread (&reply, sizeof(double)); //answer
-			if (isValidResponse(&reply)){
+			cout << "For person " << p <<", at time " << i*0.004 << ", the value of ecg "<< 2 <<" is " << reply << endl;
+
+			if (!isValidResponse(&reply)){
 				exit(0);
-				//cout << "For person " << p <<", at time " << t << ", the value of ecg "<< e <<" is " << reply << endl;
 			}
 		}
-	}
-
+	}else if(p!=0){
 	DataRequest d (p, t, e);
 	chan.cwrite (&d, sizeof (DataRequest)); // question
 	double reply;
@@ -79,36 +81,43 @@ int main(int argc, char *argv[]){
 	if (isValidResponse(&reply)){
 		cout << "For person " << p <<", at time " << t << ", the value of ecg "<< e <<" is " << reply << endl;
 	}
+	}
+
+	
 
 	
 	/* this section shows how to get the length of a file
 	you have to obtain the entire file over multiple requests 
 	(i.e., due to buffer space limitation) and assemble it
 	such that it is identical to the original*/
-	FileRequest fm (0,0);
-	int len = sizeof (FileRequest) + filename.size()+1;
-	char buf2 [len];
-	memcpy (buf2, &fm, sizeof (FileRequest));
-	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
-	chan.cwrite (buf2, len);  
-	int64 filelen;
-	chan.cread (&filelen, sizeof(int64));
-	if (isValidResponse(&filelen)){
-		cout << "File length is: " << filelen << " bytes" << endl;
-	}
+	if(filename != "\0") {
+		FileRequest fm (0,0);
+		int len = sizeof (FileRequest) + filename.size()+1;
+		char buf2 [len];
+		memcpy (buf2, &fm, sizeof (FileRequest));
+		strcpy (buf2 + sizeof (FileRequest), filename.c_str());
+		chan.cwrite (buf2, len);  
+		int64 filelen;
+		chan.cread (&filelen, sizeof(int64));
+		if (isValidResponse(&filelen)){
+			cout << "File length is: " << filelen << " bytes" << endl;
+		}
 
-	int64 rem = filelen;
-	char buf[len];
-	FileRequest* f = (FileRequest*) buf;
-	ofstream of (filename);
-	char recvbuf[buffercapacity];
-	while (rem > 0) { //while the remaining is greater than 0
-		f->length = min(rem, (int64)buffercapacity);
-		chan.cwrite(buf2, len);
-		chan.cread(recvbuf, buffercapacity);
-		of.write(recvbuf, f->length);
-		rem -= f->length;
+		int64 rem = filelen;
+		FileRequest* f = (FileRequest*) buf2;
+		int of =open(("recieved/"+filename).c_str(),O_CREAT | O_WRONLY);
+		char recvbuf[buffercapacity];
+		while (rem > 0) { //while the remaining is greater than 0
+			f->length = min(rem, (int64)buffercapacity);
+			chan.cwrite(buf2, len);
+			chan.cread(recvbuf, buffercapacity);
+			ftruncate(of, f->offset);
+			rem -= f->length;
+			f->offset+=f->length;
+		}
+		close(of);
 	}
+	
 	if(isNewChan) {
 		Request nc (NEWCHAN_REQ_TYPE);
 		chan.cwrite(&nc, sizeof(nc));
