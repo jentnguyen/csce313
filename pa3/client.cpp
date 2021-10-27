@@ -11,10 +11,10 @@ int main(int argc, char *argv[]){
 	int e = -1;
 	string filename = "\0";
 	int buffercapacity = MAX_MESSAGE; //maximum bc we don't want to use uneccessary requests
-	string bcapstring = "";
+	string bcapstring = to_string(buffercapacity);
 	bool isNewChan = false;
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "p:t:e:f:m:c::")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:c")) != -1) {
 		switch (opt) {
 			case 'f':
 				filename = optarg;
@@ -52,7 +52,7 @@ int main(int argc, char *argv[]){
 	if(t == -0.1 && e == -1 && p!=0) {
 		for(int i = 0; i < 1000; i++) {
 			DataRequest d (p, i*0.004, 1);
-			chan.cwrite (&d, sizeof (DataRequest)); // question
+			chan.cwrite (&d, sizeof (d)); // question
 			double reply;
 			chan.cread (&reply, sizeof(double)); //answer
 			cout << "For person " << p <<", at time " << i*0.004 << ", the value of ecg "<< 1 <<" is " << reply << endl;
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]){
 		}
 		for(int i = 0; i < 1000; i++) {
 			DataRequest d (p, i*0.004, 2);
-			chan.cwrite (&d, sizeof (DataRequest)); // question
+			chan.cwrite (&d, sizeof(d)); // question
 			double reply;
 			chan.cread (&reply, sizeof(double)); //answer
 			cout << "For person " << p <<", at time " << i*0.004 << ", the value of ecg "<< 2 <<" is " << reply << endl;
@@ -75,7 +75,7 @@ int main(int argc, char *argv[]){
 		}
 	}else if(p!=0){
 	DataRequest d (p, t, e);
-	chan.cwrite (&d, sizeof (DataRequest)); // question
+	chan.cwrite (&d, sizeof (d)); // question
 	double reply;
 	chan.cread (&reply, sizeof(double)); //answer
 	if (isValidResponse(&reply)){
@@ -96,38 +96,44 @@ int main(int argc, char *argv[]){
 		char buf2 [len];
 		memcpy (buf2, &fm, sizeof (FileRequest));
 		strcpy (buf2 + sizeof (FileRequest), filename.c_str());
-		chan.cwrite (buf2, len);  
+		chan.cwrite (&buf2, len);  
 		int64 filelen;
 		chan.cread (&filelen, sizeof(int64));
 		if (isValidResponse(&filelen)){
 			cout << "File length is: " << filelen << " bytes" << endl;
+		} else {
+			exit(0);
 		}
 
 		int64 rem = filelen;
 		FileRequest* f = (FileRequest*) buf2;
-		int of =open(("recieved/"+filename).c_str(),O_CREAT | O_WRONLY);
+		FILE * file = fopen(("received/" + filename).c_str(), "w+");
+		if(file == NULL) {
+			cout << "could not open file" << endl;
+			exit(-1);
+		}
 		char recvbuf[buffercapacity];
 		while (rem > 0) { //while the remaining is greater than 0
 			f->length = min(rem, (int64)buffercapacity);
-			chan.cwrite(buf2, len);
-			chan.cread(recvbuf, buffercapacity);
-			ftruncate(of, f->offset);
+			chan.cwrite(&buf2, len);
+			chan.cread(&recvbuf, buffercapacity);
+			fwrite(recvbuf, 1, f->length, file); 
 			rem -= f->length;
 			f->offset+=f->length;
 		}
-		close(of);
+		fclose(file);
 	}
 	
 	if(isNewChan) {
 		Request nc (NEWCHAN_REQ_TYPE);
 		chan.cwrite(&nc, sizeof(nc));
-		char chanName[1024];
-		chan.cread(chanName, sizeof(chanName));
+		char chanName[buffercapacity];
+		chan.cread(&chanName, buffercapacity);
 
 		FIFORequestChannel newchan (chanName, FIFORequestChannel::CLIENT_SIDE);
 
 		Request q (QUIT_REQ_TYPE);
-    	chan.cwrite (&q, sizeof (Request));
+    	newchan.cwrite (&q, sizeof (Request));
 	}
 
 	// closing the channel    
