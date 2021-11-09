@@ -5,19 +5,43 @@
 #include <sys/wait.h>
 using namespace std;
 
-void patient_thread_function(/*add necessary arguments*/){
+void patient_thread_function(int p, int n, BoundedBuffer* requestBuffer){
     /* What will the patient threads do? */
+	for(int i = 0; i < 1000; i++) {
+		DataRequest r (p, i*0.004, 1);
+		vector<char> v = vector<char>((char*)&r, (char*)&r + sizeof(DataRequest));
+		requestBuffer->push(v);
+	}
 }
 
-void worker_thread_function(/*add necessary arguments*/){
+void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBuf, FIFORequestChannel* chan){
     /*
 		Functionality of the worker threads	
     */
 }
-void histogram_thread_function (/*add necessary arguments*/){
+void histogram_thread_function (HistogramCollection* histCol, BoundedBuffer* histBuf){
     /*
 		Functionality of the histogram threads	
     */
+}
+void file_thread_function(string filename, int64 filelen, int buffercapacity, BoundedBuffer* requestBuf) {
+	//FileRequest f = *(FileRequest*) requestBuf;	
+	int64 rem = filelen;
+	FileRequest fm (0,0);
+	int len = sizeof (FileRequest) + filename.size()+1;
+	char buf2 [len];
+	memcpy (buf2, &fm, sizeof (FileRequest));
+	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
+	FileRequest* f = (FileRequest*) buf2;
+	char recvbuf[buffercapacity];
+	while (rem > 0) { //while the remaining is greater than 0; 
+		f->length = min(rem, (int64)buffercapacity); //this line updates the length
+		vector<char> v = vector<char> ((char*)&buf2, (char*)&buf2 + len);
+		requestBuf->push(v);
+		rem -= f->length; //updates while loop
+		f->offset+=f->length; //updates another parameter in file request packet
+
+	}
 }
 int main(int argc, char *argv[]){
 
@@ -77,7 +101,14 @@ int main(int argc, char *argv[]){
     gettimeofday (&start, 0);
 
     /* Start all threads here */
-	
+	FileRequest fm (0,0);
+	int len = sizeof (FileRequest) + filename.size()+1;
+	char buf2 [len];
+	memcpy (buf2, &fm, sizeof (FileRequest));
+	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
+	chan.cwrite (&buf2, len);  
+	int64 filelen;
+	chan.cread (&filelen, sizeof(int64));
 
 	/* Join all threads here */
     gettimeofday (&end, 0);
