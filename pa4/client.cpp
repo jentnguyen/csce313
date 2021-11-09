@@ -22,16 +22,38 @@ void histogram_thread_function (/*add necessary arguments*/){
 int main(int argc, char *argv[]){
 
 	int opt;
-	int p = 1;
-	double t = 0.0;
-	int e = 1;
+	int p = 1; //number of patient threads
+	double t = -0.1;
+	int e = -1;
+	int n = 1; //number of data points you want to take
+	int m = 100; //buffer capacity
+	int h = 1; //number of histogram threads
+	int w = 1; //worker threads
 	string filename = "";
-	int b = 10; // size of bounded buffer, note: this is different from another variable buffercapacity/m
+	int b = 100; // size of bounded buffer, note: this is different from another variable buffercapacity/m
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "f:")) != -1) {
+	while ((opt = getopt(argc, argv, "f:p:n:b:w:m:h:")) != -1) {
 		switch (opt) {
 			case 'f':
 				filename = optarg;
+				break;
+			case 'p':
+				p = atoi(optarg); 
+				break;
+			case 'n':
+				n = atoi(optarg);
+				break;
+			case 'b':
+				b = atoi(optarg);
+				break;
+			case 'w':
+				w = atoi(optarg);
+				break;
+			case 'm':
+				m = atoi(optarg);
+				break;
+			case 'h':
+				h = atoi(optarg);
 				break;
 		}
 	}
