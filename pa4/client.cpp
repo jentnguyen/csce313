@@ -46,8 +46,7 @@ void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBu
 
 	   }
 	   else if(r->getType() == QUIT_REQ_TYPE) {
-		   DataRequest* req = (DataRequest*) data;
-		   chan->cwrite(req, sizeof(req));
+		   chan->cwrite(&r, sizeof(r));
 		   break;
 	   }
    }
@@ -79,7 +78,6 @@ void file_thread_function(string filename, int64 filelen, int buffercapacity, Bo
 		requestBuf->push(v);
 		rem -= f->length; //updates while loop
 		f->offset+=f->length; //updates another parameter in file request packet
-
 	}
 }
 int main(int argc, char *argv[]){
