@@ -59,7 +59,9 @@ public:
         cout << endl;
     }
 
-    
+    void update(int p, double value) {
+        hists.at(p-1)->update(value); //allows to call update function in histogram threads
+    }
 
     
 };

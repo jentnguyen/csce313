@@ -5,6 +5,15 @@
 #include <sys/wait.h>
 using namespace std;
 
+struct response {
+	int p;
+	double value;
+	response(int _p, double _v) {
+		p = _p;
+		value = _v;
+	}
+};
+
 void patient_thread_function(int p, int n, BoundedBuffer* requestBuffer){
     /* What will the patient threads do? */
 	for(int i = 0; i < 1000; i++) {
@@ -18,11 +27,41 @@ void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBu
     /*
 		Functionality of the worker threads	
     */
+   vector <char> rt = requestBuf->pop();
+   char* data = rt.data();
+   Request* r = (Request*)data;
+
+   while(true) {
+	   if(r->getType() == DATA_REQ_TYPE) {
+		   DataRequest* req = (DataRequest*) data;
+		   chan->cwrite(req, sizeof(req));
+		   double reply;
+		   chan->cread(&reply, sizeof(double));
+		   
+		   response res(req->person, reply);
+		   vector<char> v = vector<char>((char*)&res, (char*)&res + sizeof(req));
+		   responseBuf->push(v);
+	   } 
+	   else if(r->getType() == FILE_REQ_TYPE) {
+
+	   }
+	   else if(r->getType() == QUIT_REQ_TYPE) {
+		   DataRequest* req = (DataRequest*) data;
+		   chan->cwrite(req, sizeof(req));
+		   break;
+	   }
+   }
+   
 }
 void histogram_thread_function (HistogramCollection* histCol, BoundedBuffer* histBuf){
-    /*
-		Functionality of the histogram threads	
-    */
+	//read from request buffer
+	while(true) {
+		vector <char> rt = histBuf->pop();
+		char* data = rt.data();
+		response* r = (response*)data;
+		histCol->update(r->p, r->value);
+	}
+	
 }
 void file_thread_function(string filename, int64 filelen, int buffercapacity, BoundedBuffer* requestBuf) {
 	//FileRequest f = *(FileRequest*) requestBuf;	
