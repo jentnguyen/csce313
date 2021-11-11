@@ -133,6 +133,11 @@ int main(int argc, char *argv[]){
 	BoundedBuffer request_buffer(b);
 	HistogramCollection hc;
 
+	for(int i = 0; i < p; i++) {
+		Histogram* hist = new Histogram(10, -2, 2);
+		hc.add(hist);
+	}
+
 
 	struct timeval start, end;
     gettimeofday (&start, 0);
