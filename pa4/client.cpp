@@ -40,7 +40,7 @@ void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBu
 		   chan->cread(&reply, sizeof(double));
 		   
 		   response res(req->person, reply);
-		   vector<char> v = vector<char>((char*)&res, (char*)&res + sizeof(req));
+		   vector<char> v = vector<char>((char*)&res, (char*)&res + sizeof(response));
 		   responseBuf->push(v);
 	   } 
 	   else if(r->getType() == FILE_REQ_TYPE) {
@@ -59,6 +59,9 @@ void histogram_thread_function (HistogramCollection* histCol, BoundedBuffer* his
 		vector <char> rt = histBuf->pop();
 		char* data = rt.data();
 		response* r = (response*)data;
+		if(r->p == 0) {
+			break;
+		}
 		histCol->update(r->p, r->value);
 	}
 	
@@ -84,7 +87,7 @@ void file_thread_function(string filename, int64 filelen, int buffercapacity, Bo
 int main(int argc, char *argv[]){
 
 	int opt;
-	int p = 1; //number of patient threads
+	int p = 0; //number of patient threads
 	double t = -0.1;
 	int e = -1;
 	int n = 1; //number of data points you want to take
@@ -145,14 +148,6 @@ int main(int argc, char *argv[]){
     gettimeofday (&start, 0);
 
     /* Start all threads here */
-	FileRequest fm (0,0);
-	int len = sizeof (FileRequest) + filename.size()+1;
-	char buf2 [len];
-	memcpy (buf2, &fm, sizeof (FileRequest));
-	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
-	chan.cwrite (&buf2, len);  
-	int64 filelen;
-	chan.cread (&filelen, sizeof(int64));
 
 	//create threads
 	vector<thread> patients;
@@ -163,7 +158,7 @@ int main(int argc, char *argv[]){
 		patients.push_back(patient_thread);
 	}
 	for(int j = 0; j < w; j++) {
-		thread worker_thread(worker_thread_function, &request_buffer, &response_buffer,chan);
+		thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, &chan);
 		workers.push_back(worker_thread);
 	}
 	for(int k = 0; k < h; k++) {
@@ -171,21 +166,49 @@ int main(int argc, char *argv[]){
 		histograms.push_back(histogram_thread);
 	}
 	//there will only be one file thread
-	thread file_thread(file_thread_function, filename, filelen, m, &request_buffer);
+	if(filename != "") {
+		//find the length of the file
+		FileRequest fm (0,0);
+		int len = sizeof (FileRequest) + filename.size()+1;
+		char buf2 [len];
+		memcpy (buf2, &fm, sizeof (FileRequest));
+		strcpy (buf2 + sizeof (FileRequest), filename.c_str());
+		chan.cwrite (&buf2, len);  
+		int64 filelen;
+		chan.cread (&filelen, sizeof(int64));
+		thread file_thread(file_thread_function, filename, filelen, m, &request_buffer);
+		file_thread.join();
+	}
+
 
 	/* Join all threads here */
 	//join patient and file threads
 	for(int i = 0; i < patients.size(); i++) {
 		patients.at(i).join();
-	}
-	file_thread.join();
-	
+	}	
 	//push w quit messages to request buffer
 	Request q (QUIT_REQ_TYPE);
 	vector<char> quit_message = vector<char>((char*)&q, (char*)&q + sizeof(Request));
 	for(int j = 0; j < w; j++) {
 		request_buffer.push(quit_message);
 	}
+
+	//join worker threads
+	for(int k = 0; k < w; k++) {
+		workers.at(k).join();
+	}
+
+	//push special packets to response buffer to indicate that histogram threads can join
+	response res(0, 4);
+	vector<char> v = vector<char>((char*)&res, (char*)&res + sizeof(response));
+	for(int i = 0; i < h; i++) {
+		response_buffer.push(v);
+	}
+
+	for(int j = 0;j < histograms.size(); j++) {
+		histograms.at(j).join();
+	}
+
 
     gettimeofday (&end, 0);
 
