@@ -181,7 +181,11 @@ int main(int argc, char *argv[]){
 	file_thread.join();
 	
 	//push w quit messages to request buffer
-	
+	Request q (QUIT_REQ_TYPE);
+	vector<char> quit_message = vector<char>((char*)&q, (char*)&q + sizeof(Request));
+	for(int j = 0; j < w; j++) {
+		request_buffer.push(quit_message);
+	}
 
     gettimeofday (&end, 0);
 
