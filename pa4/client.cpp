@@ -3,6 +3,7 @@
 #include "BoundedBuffer.h"
 #include "HistogramCollection.h"
 #include <sys/wait.h>
+#include <thread>
 using namespace std;
 
 struct response {
@@ -131,6 +132,7 @@ int main(int argc, char *argv[]){
 	}
 	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
 	BoundedBuffer request_buffer(b);
+	BoundedBuffer response_buffer(b);
 	HistogramCollection hc;
 
 	for(int i = 0; i < p; i++) {
@@ -152,7 +154,35 @@ int main(int argc, char *argv[]){
 	int64 filelen;
 	chan.cread (&filelen, sizeof(int64));
 
+	//create threads
+	vector<thread> patients;
+	vector<thread> workers;
+	vector<thread> histograms;
+	for(int i = 0; i < p; i++) {
+		thread patient_thread(patient_thread_function, p, n, &request_buffer);
+		patients.push_back(patient_thread);
+	}
+	for(int j = 0; j < w; j++) {
+		thread worker_thread(worker_thread_function, &request_buffer, &response_buffer,chan);
+		workers.push_back(worker_thread);
+	}
+	for(int k = 0; k < h; k++) {
+		thread histogram_thread(histogram_thread_function, hc, &response_buffer);
+		histograms.push_back(histogram_thread);
+	}
+	//there will only be one file thread
+	thread file_thread(file_thread_function, filename, filelen, m, &request_buffer);
+
 	/* Join all threads here */
+	//join patient and file threads
+	for(int i = 0; i < patients.size(); i++) {
+		patients.at(i).join();
+	}
+	file_thread.join();
+	
+	//push w quit messages to request buffer
+	
+
     gettimeofday (&end, 0);
 
     // print the results and time difference
