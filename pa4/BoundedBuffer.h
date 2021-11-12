@@ -5,6 +5,7 @@
 #include <queue>
 #include <string>
 #include "Semaphore.h"
+#include <mutex>
 
 using namespace std;
 
@@ -21,10 +22,10 @@ private:
 	mutex m; //mutex to avoid race conditions
 	Semaphore fullSlots;
 	Semaphore emptySlots;
-	Semaphore mutex;
+	Semaphore mute;
 
 public:
-	BoundedBuffer(int _cap):fullSlots(0), emptySlots(cap), mutex(1){
+	BoundedBuffer(int _cap):fullSlots(0), emptySlots(cap), mute(1){
 
 	}
 	~BoundedBuffer(){
@@ -38,9 +39,9 @@ public:
 		//2. Push the data onto the queue
 		//3. Do necessary unlocking and notification
 		emptySlots.P();
-		mutex.P();
+		mute.P();
 		q.push(data);
-		mutex.V();
+		mute.V();
 		fullSlots.V();
 		
 	}
@@ -51,10 +52,10 @@ public:
 		//3. Unlock and notify using the right sync variables
 		//4. Return the popped vector
 		fullSlots.P();
-		mutex.P();
+		mute.P();
 		vector<char> item = q.front();
 		q.pop();
-		mutex.V();
+		mute.V();
 		emptySlots.V();
 		return item;
 	}

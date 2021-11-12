@@ -219,8 +219,8 @@ int main(int argc, char *argv[]){
     cout << "Took " << secs << " seconds and " << usecs << " micro seconds" << endl;
 	
 	// closing the channel    
-    Request q (QUIT_REQ_TYPE);
-    chan.cwrite (&q, sizeof (Request));
+    Request quit (QUIT_REQ_TYPE);
+    chan.cwrite (&quit, sizeof (Request));
 	// client waiting for the server process, which is the child, to terminate
 	wait(0);
 	cout << "Client process exited" << endl;
