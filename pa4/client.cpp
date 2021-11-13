@@ -24,7 +24,7 @@ void patient_thread_function(int p, int n, BoundedBuffer* requestBuffer){
 	}
 }
 
-void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBuf, FIFORequestChannel* chan){
+void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBuf, FIFORequestChannel* chan, int buffercapacity){
     /*
 		Functionality of the worker threads	
     */
@@ -44,6 +44,33 @@ void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBu
 		   responseBuf->push(v);
 	   } 
 	   else if(r->getType() == FILE_REQ_TYPE) {
+		   	FileRequest fm (0,0);
+			FileRequest* f = (FileRequest*) r;
+			string name = f->getFileName();
+			int len = sizeof (FileRequest) + name.size()+1;
+			char buf2 [len];
+			memcpy (buf2, &f, sizeof(FileRequest));
+			strcpy (buf2 + sizeof(FileRequest), name.c_str());
+			chan->cwrite (&buf2, len);
+			int64 filelen;
+			chan->cread (&filelen, sizeof(int64));
+			int64 rem = filelen;
+
+			FILE * file = fopen(("received/" + name).c_str(), "w+");
+			if(file == NULL) {
+				cout << "could not open file" << endl;
+				exit(-1);
+			}
+			char recvbuf[buffercapacity];
+			while (rem > 0) { //while the remaining is greater than 0
+			f->length = min(rem, (int64)buffercapacity);
+			chan->cwrite(&buf2, len);
+			chan->cread(&recvbuf, buffercapacity);
+			fwrite(recvbuf, 1, f->length, file); 
+			rem -= f->length;
+			f->offset+=f->length;
+		}
+		fclose(file);
 
 	   }
 	   else if(r->getType() == QUIT_REQ_TYPE) {
