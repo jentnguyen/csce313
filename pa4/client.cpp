@@ -17,27 +17,32 @@ struct response {
 
 void patient_thread_function(int p, int n, BoundedBuffer* requestBuffer){
     /* What will the patient threads do? */
-	for(int i = 0; i < 1000; i++) {
-		DataRequest r (p, i*0.004, 1);
+	DataRequest r (p, 0.0, 1);
+	for(int i = 0; i < n; i++) {
+		// cout << "time is " << r.seconds << endl;
 		vector<char> v = vector<char>((char*)&r, (char*)&r + sizeof(DataRequest));
 		requestBuffer->push(v);
+		r.seconds += 0.004;
 	}
+	// cout << "for loop done" << endl;
 }
 
 void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBuf, FIFORequestChannel* chan, int buffercapacity){
     /*
 		Functionality of the worker threads	
     */
-   vector <char> rt = requestBuf->pop();
-   char* data = rt.data();
-   Request* r = (Request*)data;
-
    while(true) {
+		vector <char> rt = requestBuf->pop();
+		char* data = rt.data();
+		Request* r = (Request*)data;
+
 	   if(r->getType() == DATA_REQ_TYPE) {
 		   DataRequest* req = (DataRequest*) data;
-		   chan->cwrite(req, sizeof(req));
+		//    cout << req->person << " " << req->seconds << " " << req->ecgno << endl;
+		   chan->cwrite(req, sizeof(DataRequest));
 		   double reply;
 		   chan->cread(&reply, sizeof(double));
+		//    cout << "reply is " << reply << endl;
 		   
 		   response res(req->person, reply);
 		   vector<char> v = vector<char>((char*)&res, (char*)&res + sizeof(response));
@@ -63,12 +68,12 @@ void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBu
 			}
 			char recvbuf[buffercapacity];
 			while (rem > 0) { //while the remaining is greater than 0
-			f->length = min(rem, (int64)buffercapacity);
-			chan->cwrite(&buf2, len);
-			chan->cread(&recvbuf, buffercapacity);
-			fwrite(recvbuf, 1, f->length, file); 
-			rem -= f->length;
-			f->offset+=f->length;
+				f->length = min(rem, (int64)buffercapacity);
+				chan->cwrite(&buf2, len);
+				chan->cread(&recvbuf, buffercapacity);
+				fwrite(recvbuf, 1, f->length, file); 
+				rem -= f->length;
+				f->offset+=f->length;
 		}
 		fclose(file);
 
@@ -116,7 +121,6 @@ int main(int argc, char *argv[]){
 	int opt;
 	int p = 0; //number of patient threads
 	double t = -0.1;
-	int e = -1;
 	int n = 1; //number of data points you want to take
 	int m = 100; //buffer capacity
 	int h = 1; //number of histogram threads
@@ -181,9 +185,12 @@ int main(int argc, char *argv[]){
 	vector<thread> patients;
 	vector<thread> workers;
 	vector<thread> histograms;
-	for(int i = 0; i < p; i++) {
-		thread patient_thread(patient_thread_function, p, n, &request_buffer);
-		patients.push_back(patient_thread);
+	for(int i = 1; i <= p; i++) {
+		// thread patient_thread(patient_thread_function, p, n, &request_buffer);
+		// patients.push_back(patient_thread);
+		// thread patient_thread(patient_thread_function, p, n, &request_buffer);
+		patients.push_back(thread(patient_thread_function, i, n, &request_buffer));
+		
 	}
 	for(int j = 0; j < w; j++) {
 		char chanName[512];
@@ -192,12 +199,12 @@ int main(int argc, char *argv[]){
 		chan.cread(chanName, sizeof(chanName));
 		wchans[j] = new FIFORequestChannel(chanName, FIFORequestChannel::CLIENT_SIDE);
 
-		thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m);
-		workers.push_back(worker_thread);
+		// thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m);
+		workers.push_back(thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m));
 	}
 	for(int k = 0; k < h; k++) {
-		thread histogram_thread(histogram_thread_function, &hc, &response_buffer);
-		histograms.push_back(histogram_thread);
+		// thread histogram_thread(histogram_thread_function, &hc, &response_buffer);
+		histograms.push_back(thread(histogram_thread_function, &hc, &response_buffer));
 	}
 	//there will only be one file thread
 	if(filename != "") {
@@ -220,6 +227,9 @@ int main(int argc, char *argv[]){
 	for(int i = 0; i < patients.size(); i++) {
 		patients.at(i).join();
 	}	
+
+	cout << "patients joined" << endl;
+
 	//push w quit messages to request buffer
 	Request q (QUIT_REQ_TYPE);
 	vector<char> quit_message = vector<char>((char*)&q, (char*)&q + sizeof(Request));
@@ -227,10 +237,14 @@ int main(int argc, char *argv[]){
 		request_buffer.push(quit_message);
 	}
 
+	cout << "quit requests sent" << endl;
+
 	//join worker threads
 	for(int k = 0; k < w; k++) {
 		workers.at(k).join();
 	}
+
+	cout << "workers joined" << endl;
 
 	//push special packets to response buffer to indicate that histogram threads can join
 	response res(0, 4);
@@ -251,6 +265,11 @@ int main(int argc, char *argv[]){
     int secs = (end.tv_sec * 1e6 + end.tv_usec - start.tv_sec * 1e6 - start.tv_usec)/(int) 1e6;
     int usecs = (int)(end.tv_sec * 1e6 + end.tv_usec - start.tv_sec * 1e6 - start.tv_usec)%((int) 1e6);
     cout << "Took " << secs << " seconds and " << usecs << " micro seconds" << endl;
+
+	// delete all dynamic channels
+	for (int i = 0; i < w; ++i) {
+		delete wchans[i];
+	}
 	
 	// closing the channel    
     Request quit (QUIT_REQ_TYPE);

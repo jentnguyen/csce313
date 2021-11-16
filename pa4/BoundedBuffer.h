@@ -25,8 +25,8 @@ private:
 	Semaphore mute;
 
 public:
-	BoundedBuffer(int _cap):fullSlots(0), emptySlots(cap), mute(1){
-
+	BoundedBuffer(int _cap):fullSlots(0), emptySlots(_cap), mute(1){
+		cap = _cap;
 	}
 	~BoundedBuffer(){
 
