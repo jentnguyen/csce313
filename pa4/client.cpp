@@ -161,6 +161,7 @@ int main(int argc, char *argv[]){
 		}
 	}
 	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
+	FIFORequestChannel** wchans = new FIFORequestChannel*[w];
 	BoundedBuffer request_buffer(b);
 	BoundedBuffer response_buffer(b);
 	HistogramCollection hc;
@@ -185,11 +186,17 @@ int main(int argc, char *argv[]){
 		patients.push_back(patient_thread);
 	}
 	for(int j = 0; j < w; j++) {
-		thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, &chan);
+		char chanName[512];
+		Request newchan(NEWCHAN_REQ_TYPE);
+		chan.cwrite(&newchan, sizeof(newchan));
+		chan.cread(chanName, sizeof(chanName));
+		wchans[j] = new FIFORequestChannel(chanName, FIFORequestChannel::CLIENT_SIDE);
+
+		thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m);
 		workers.push_back(worker_thread);
 	}
 	for(int k = 0; k < h; k++) {
-		thread histogram_thread(histogram_thread_function, hc, &response_buffer);
+		thread histogram_thread(histogram_thread_function, &hc, &response_buffer);
 		histograms.push_back(histogram_thread);
 	}
 	//there will only be one file thread
