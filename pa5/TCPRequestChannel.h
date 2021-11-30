@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <iostream>
+#include "common.h"
 
 class TCPRequestChannel{
 private:

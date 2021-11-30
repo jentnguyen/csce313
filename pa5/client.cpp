@@ -1,5 +1,4 @@
 #include "common.h"
-//#include "FIFOreqchannel.h"
 #include "TCPRequestChannel.h"
 #include "BoundedBuffer.h"
 #include "HistogramCollection.h"
@@ -209,16 +208,16 @@ int main(int argc, char *argv[]){
 	}
 	for(int j = 0; j < w; j++) {
 		char chanName[1024];
-		Request newchan(NEWCHAN_REQ_TYPE);
-		chan.cwrite(&newchan, sizeof(newchan));
-		chan.cread(chanName, sizeof(chanName));
+		// Request newchan(NEWCHAN_REQ_TYPE);
+		// chan.cwrite(&newchan, sizeof(newchan));
+		// chan.cread(chanName, sizeof(chanName));
 		wchans[j] = new TCPRequestChannel(chanName, r);
 
 		// thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m);
 		workers.push_back(thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m));
 	}
 	//histograms will be hard coded 10-50 for data transfer and 0 for file transfer
-	for(int k = 0; k <= 10; k++) {
+	for(int k = 0; k <= 50; k++) {
 		// thread histogram_thread(histogram_thread_function, &hc, &response_buffer);
 		histograms.push_back(thread(histogram_thread_function, &hc, &response_buffer));
 	}
@@ -245,7 +244,7 @@ int main(int argc, char *argv[]){
 		patients.at(i).join();
 	}	
 
-	cout << "patients joined" << endl;
+	//cout << "patients joined" << endl;
 
 	//push w quit messages to request buffer
 	Request q (QUIT_REQ_TYPE);
@@ -254,14 +253,14 @@ int main(int argc, char *argv[]){
 		request_buffer.push(quit_message);
 	}
 
-	cout << "quit requests sent" << endl;
+	//cout << "quit requests sent" << endl;
 
 	//join worker threads
 	for(int k = 0; k < w; k++) {
 		workers.at(k).join();
 	}
 
-	cout << "workers joined" << endl;
+	//cout << "workers joined" << endl;
 
 	//push special packets to response buffer to indicate that histogram threads can join
 	response res(0, 4);
@@ -274,7 +273,7 @@ int main(int argc, char *argv[]){
 		histograms.at(j).join();
 	}
 
-	cout << "histograms joined" << endl;
+	//cout << "histograms joined" << endl;
 
 	finish = true;
 
