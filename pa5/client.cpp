@@ -188,10 +188,10 @@ int main(int argc, char *argv[]){
 	struct timeval start, end;
     gettimeofday (&start, 0);
 
-	if(filename == "") {
-		signal(SIGALRM, signal_handler);
-		alarm(2);
-	}
+	// if(filename == "") {
+	// 	signal(SIGALRM, signal_handler);
+	// 	alarm(2);
+	// }
 
     /* Start all threads here */
 
