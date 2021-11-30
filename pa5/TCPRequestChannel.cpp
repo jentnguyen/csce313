@@ -14,6 +14,7 @@ TCPRequestChannel::TCPRequestChannel (const string host_name, const string port_
         hints.ai_flags = AI_PASSIVE; // use my IP
 
         int rv;
+        cout << "server side" << endl;
         if ((rv = getaddrinfo(NULL, port_no.c_str(), &hints, &serv)) != 0) {
             cerr  << "getaddrinfo: " << gai_strerror(rv) << endl;
             exit(1);
@@ -43,6 +44,7 @@ TCPRequestChannel::TCPRequestChannel (const string host_name, const string port_
         hints.ai_socktype = SOCK_STREAM;
         int status;
         //getaddrinfo("www.example.com", "3490", &hints, &res);
+        cout << "client side" << endl;
         if ((status = getaddrinfo (host_name.c_str(), port_no.c_str(), &hints, &res)) != 0) {
             cerr << "getaddrinfo: " << gai_strerror(status) << endl;
             exit(1);

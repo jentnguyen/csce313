@@ -153,7 +153,7 @@ void process_request(TCPRequestChannel *rc, Request* r){
 	}
 	else if (r->getType() == FILE_REQ_TYPE){
 		process_file_request (rc, r);
-	// }else if (r->getType() == NEWCHAN_REQ_TYPE){
+	}else if (r->getType() == NEWCHAN_REQ_TYPE){
 	// 	process_newchannel_request(rc);
 	}else{
 		process_unknown_request(rc);
@@ -225,5 +225,10 @@ int main(int argc, char *argv[]){
         t.detach (); 
     }
 
+	handle_process_loop(control_channel);
+
+	for(int i = 0; i <channel_threads.size(); i++) {
+		channel_threads[i].join();
+	}
 	cout << "Server process exited" << endl;
 }

@@ -172,8 +172,8 @@ int main(int argc, char *argv[]){
 	// 		EXITONERROR ("Could not launch the server");
 	// 	}
 	// }
-	//FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
-	TCPRequestChannel chan ("control", r);
+	cout << "h is " << h << endl;
+	TCPRequestChannel chan (h, r);
 	TCPRequestChannel** wchans = new TCPRequestChannel*[w];
 	BoundedBuffer request_buffer(b);
 	BoundedBuffer response_buffer(b);
@@ -207,11 +207,11 @@ int main(int argc, char *argv[]){
 		
 	}
 	for(int j = 0; j < w; j++) {
-		char chanName[1024];
+		// char chanName[1024];
 		// Request newchan(NEWCHAN_REQ_TYPE);
 		// chan.cwrite(&newchan, sizeof(newchan));
 		// chan.cread(chanName, sizeof(chanName));
-		wchans[j] = new TCPRequestChannel(chanName, r);
+		wchans[j] = new TCPRequestChannel(h, r);
 
 		// thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m);
 		workers.push_back(thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m));
@@ -288,7 +288,9 @@ int main(int argc, char *argv[]){
 	// delete all dynamic channels
 	for (int i = 0; i < w; ++i) {
 	 	delete wchans[i];
-	 }
+	}
+
+	delete[] wchans;
 	
 	// closing the channel    
     Request quit (QUIT_REQ_TYPE);
