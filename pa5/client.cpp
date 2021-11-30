@@ -1,5 +1,6 @@
 #include "common.h"
-#include "FIFOreqchannel.h"
+//#include "FIFOreqchannel.h"
+#include "TCPRequestChannel.h"
 #include "BoundedBuffer.h"
 #include "HistogramCollection.h"
 #include <sys/wait.h>
@@ -27,7 +28,7 @@ void patient_thread_function(int p, int n, BoundedBuffer* requestBuffer){
 	// cout << "for loop done" << endl;
 }
 
-void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBuf, FIFORequestChannel* chan, int buffercapacity){
+void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBuf, TCPRequestChannel* chan, int buffercapacity){
     /*
 		Functionality of the worker threads	
     */
@@ -127,7 +128,7 @@ int main(int argc, char *argv[]){
 	int n = 1; //number of data points you want to take
 	int m = 100; //buffer capacity
 	string h = ""; //hostname
-	int r = 1; //portnumber
+	string r = ""; //portnumber
 	int w = 1; //worker threads
 	string filename = "";
 	int b = 100; // size of bounded buffer, note: this is different from another variable buffercapacity/m
@@ -154,26 +155,27 @@ int main(int argc, char *argv[]){
 				m = atoi(optarg);
 				break;
 			case 'h':
-				h = atoi(optarg);
+				h = optarg;
 				break;
 			case 'r': 
-				r = atoi(optarg);
+				r = optarg;
 				break;
 		}
 	}
 
-	int pid = fork ();
-	if (pid < 0){
-		EXITONERROR ("Could not create a child process for running the server");
-	}
-	if (!pid){ // The server runs in the child process
-		char* args[] = {"./server", nullptr};
-		if (execvp(args[0], args) < 0){
-			EXITONERROR ("Could not launch the server");
-		}
-	}
-	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
-	FIFORequestChannel** wchans = new FIFORequestChannel*[w];
+	//int pid = fork ();
+	// if (pid < 0){
+	// 	EXITONERROR ("Could not create a child process for running the server");
+	// }
+	// if (!pid){ // The server runs in the child process
+	// 	char* args[] = {"./server", nullptr};
+	// 	if (execvp(args[0], args) < 0){
+	// 		EXITONERROR ("Could not launch the server");
+	// 	}
+	// }
+	//FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
+	TCPRequestChannel chan ("control", r);
+	TCPRequestChannel** wchans = new TCPRequestChannel*[w];
 	BoundedBuffer request_buffer(b);
 	BoundedBuffer response_buffer(b);
 	//HistogramCollection hc;
@@ -210,7 +212,7 @@ int main(int argc, char *argv[]){
 		Request newchan(NEWCHAN_REQ_TYPE);
 		chan.cwrite(&newchan, sizeof(newchan));
 		chan.cread(chanName, sizeof(chanName));
-		wchans[j] = new FIFORequestChannel(chanName, FIFORequestChannel::CLIENT_SIDE);
+		wchans[j] = new TCPRequestChannel(chanName, r);
 
 		// thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m);
 		workers.push_back(thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m));
@@ -293,7 +295,7 @@ int main(int argc, char *argv[]){
     Request quit (QUIT_REQ_TYPE);
     chan.cwrite (&quit, sizeof (Request));
 	// client waiting for the server process, which is the child, to terminate
-	wait(0);
+	//wait(0);
 	cout << "Client process exited" << endl;
 
 }
