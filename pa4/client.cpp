@@ -49,37 +49,22 @@ void worker_thread_function(BoundedBuffer* requestBuf, BoundedBuffer* responseBu
 		   responseBuf->push(v);
 	   } 
 	   else if(r->getType() == FILE_REQ_TYPE) {
-		   	FileRequest fm (0,0);
+		    char recvbuf[buffercapacity];
 			FileRequest* f = (FileRequest*) r;
 			string name = f->getFileName();
 			int len = sizeof (FileRequest) + name.size()+1;
-			char buf2 [len];
-			memcpy (buf2, &f, sizeof(FileRequest));
-			strcpy (buf2 + sizeof(FileRequest), name.c_str());
-			chan->cwrite (&buf2, len);
-			int64 filelen;
-			chan->cread (&filelen, sizeof(int64));
-			int64 rem = filelen;
 
-			FILE * file = fopen(("received/" + name).c_str(), "w+");
-			if(file == NULL) {
-				cout << "could not open file" << endl;
-				exit(-1);
-			}
-			char recvbuf[buffercapacity];
-			while (rem > 0) { //while the remaining is greater than 0
-				f->length = min(rem, (int64)buffercapacity);
-				chan->cwrite(&buf2, len);
-				chan->cread(&recvbuf, buffercapacity);
-				fwrite(recvbuf, 1, f->length, file); 
-				rem -= f->length;
-				f->offset+=f->length;
-		}
-		fclose(file);
+			chan->cwrite (data, len);
+			chan->cread(recvbuf, buffercapacity);
+
+			FILE * file = fopen(("received/" + name).c_str(), "r+");
+			fseek(file, f->offset, SEEK_SET);
+			int write = fwrite(recvbuf, 1, f->length, file);
+			fclose(file);
 
 	   }
 	   else if(r->getType() == QUIT_REQ_TYPE) {
-		   chan->cwrite(&r, sizeof(r));
+		   chan->cwrite(r, sizeof(r));
 		   break;
 	   }
    }
@@ -104,10 +89,16 @@ void file_thread_function(string filename, int64 filelen, int buffercapacity, Bo
 	FileRequest fm (0,0);
 	int len = sizeof (FileRequest) + filename.size()+1;
 	char buf2 [len];
+
 	memcpy (buf2, &fm, sizeof (FileRequest));
 	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
 	FileRequest* f = (FileRequest*) buf2;
 	char recvbuf[buffercapacity];
+	cout << "fileLenght: " << filelen << endl;
+
+	FILE* of = fopen(("received/"+filename).c_str(), "w");
+	int write = fseek(of, filelen+1, SEEK_SET);
+	fclose(of);
 	while (rem > 0) { //while the remaining is greater than 0; 
 		f->length = min(rem, (int64)buffercapacity); //this line updates the length
 		vector<char> v = vector<char> ((char*)&buf2, (char*)&buf2 + len);
@@ -116,6 +107,18 @@ void file_thread_function(string filename, int64 filelen, int buffercapacity, Bo
 		f->offset+=f->length; //updates another parameter in file request packet
 	}
 }
+
+HistogramCollection hc;
+bool finish = false;
+
+void signal_handler(int sgno) {
+	system("clear");
+	hc.print();
+	if(!finish) {
+		alarm(2);
+	}
+}
+
 int main(int argc, char *argv[]){
 
 	int opt;
@@ -132,6 +135,7 @@ int main(int argc, char *argv[]){
 		switch (opt) {
 			case 'f':
 				filename = optarg;
+				finish = true;
 				break;
 			case 'p':
 				p = atoi(optarg); 
@@ -168,7 +172,7 @@ int main(int argc, char *argv[]){
 	FIFORequestChannel** wchans = new FIFORequestChannel*[w];
 	BoundedBuffer request_buffer(b);
 	BoundedBuffer response_buffer(b);
-	HistogramCollection hc;
+	//HistogramCollection hc;
 
 	for(int i = 0; i < p; i++) {
 		Histogram* hist = new Histogram(10, -2, 2);
@@ -178,6 +182,11 @@ int main(int argc, char *argv[]){
 
 	struct timeval start, end;
     gettimeofday (&start, 0);
+
+	if(filename == "") {
+		signal(SIGALRM, signal_handler);
+		alarm(2);
+	}
 
     /* Start all threads here */
 
@@ -193,7 +202,7 @@ int main(int argc, char *argv[]){
 		
 	}
 	for(int j = 0; j < w; j++) {
-		char chanName[512];
+		char chanName[1024];
 		Request newchan(NEWCHAN_REQ_TYPE);
 		chan.cwrite(&newchan, sizeof(newchan));
 		chan.cread(chanName, sizeof(chanName));
@@ -208,6 +217,7 @@ int main(int argc, char *argv[]){
 	}
 	//there will only be one file thread
 	if(filename != "") {
+
 		//find the length of the file
 		FileRequest fm (0,0);
 		int len = sizeof (FileRequest) + filename.size()+1;
@@ -257,6 +267,9 @@ int main(int argc, char *argv[]){
 		histograms.at(j).join();
 	}
 
+	cout << "histograms joined" << endl;
+
+	finish = true;
 
     gettimeofday (&end, 0);
 
@@ -268,8 +281,8 @@ int main(int argc, char *argv[]){
 
 	// delete all dynamic channels
 	for (int i = 0; i < w; ++i) {
-		delete wchans[i];
-	}
+	 	delete wchans[i];
+	 }
 	
 	// closing the channel    
     Request quit (QUIT_REQ_TYPE);

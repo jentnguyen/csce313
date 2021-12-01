@@ -29,7 +29,9 @@ public:
 		cap = _cap;
 	}
 	~BoundedBuffer(){
-
+		//delete fullSlots;
+		//delete emptySlots;
+		//delete mute;
 	}
 
 	void push(vector<char> data){
