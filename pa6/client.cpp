@@ -39,8 +39,33 @@ void worker_thread_function(int _w, FIFORequestChannel** fifo_arr, BoundedBuffer
 
 	epfd = epoll_create1(0);
 
+	//epoll events for each channel
 	for(int i = 0; i < _w; i++) {
-		
+		ev.events = EPOLLIN;
+		ev.data.fd = fifo_arr[i]->rfd;
+
+		//"prime" file descriptor
+		vector<char> unit = req_buf.pop();
+		char* data = unit.data();
+
+		fifo_arr[i]->cwrite(&data, unit.size()); 
+
+		epoll_ctl(epfd, EPOLL_CTL_ADD, rfd, &ev);
+	}
+
+	//wait for responses
+	while(true) {
+		nfds = epoll_wait(epfd, events, _w, -1);
+		for(int i = 0; i < nfds; ++i) {
+			int rfd = events[i].data.fd; //get fd
+
+			//write new requests
+			vector<char> unit = req_buf.pop();
+			char* data = unit.data();
+
+			// ->cwrite(&data, unit.size()); 
+
+		} 
 	}
 }
 void histogram_thread_function (HistogramCollection* histCol, BoundedBuffer* histBuf){
