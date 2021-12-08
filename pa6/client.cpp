@@ -4,6 +4,8 @@
 #include "HistogramCollection.h"
 #include <sys/wait.h>
 #include <thread>
+#include <sys/epoll.h>
+#include <map>
 using namespace std;
 
 struct response {
@@ -27,44 +29,108 @@ void patient_thread_function(int p, int n, BoundedBuffer* requestBuffer){
 	// cout << "for loop done" << endl;
 }
 
-void worker_thread_function(int _w, FIFORequestChannel** fifo_arr, BoundedBuffer req_buf){
+void worker_thread_function(int w, FIFORequestChannel** fifo_arr, BoundedBuffer* req_buf, int m, BoundedBuffer* responseBuf){
     /*
 		Functionality of the worker threads	
     */
 	int epfd, nfds;
-	struct epoll_event {
-		int ev;
-		int events = _w;
-	}   
+	int sent = 0;
+	int received = 0;
+	bool quit = false;
+	//nfds is how many file descriptors are ready
+	//epfd is epoll file descriptor
+
+	map<int, int> map1;
+	vector<vector<char>> a;
+
+	struct epoll_event ev, events[w];
 
 	epfd = epoll_create1(0);
-
+	cout << epfd << endl;
 	//epoll events for each channel
-	for(int i = 0; i < _w; i++) {
+	for(int i = 0; i < w; i++) {
 		ev.events = EPOLLIN;
 		ev.data.fd = fifo_arr[i]->rfd;
 
 		//"prime" file descriptor
-		vector<char> unit = req_buf.pop();
+		vector<char> unit = req_buf->pop();
 		char* data = unit.data();
+		a.push_back(unit);
+		fifo_arr[i]->cwrite(data, unit.size());
+		sent++;
 
-		fifo_arr[i]->cwrite(&data, unit.size()); 
+		epoll_ctl(epfd, EPOLL_CTL_ADD, fifo_arr[i]->rfd, &ev);
 
-		epoll_ctl(epfd, EPOLL_CTL_ADD, rfd, &ev);
+		map1.insert(pair<int, int> (fifo_arr[i]->rfd, i)); //(file descriptor, index)
 	}
+	cout << "while starting" << endl;
 
 	//wait for responses
 	while(true) {
-		nfds = epoll_wait(epfd, events, _w, -1);
+		nfds = epoll_wait(epfd, events, w, -1);
+		if (nfds == -1) {
+			perror("idk");
+			exit(0);
+		}
 		for(int i = 0; i < nfds; ++i) {
 			int rfd = events[i].data.fd; //get fd
+			int index = map1.at(rfd); //returns index of fifo_arr
 
-			//write new requests
-			vector<char> unit = req_buf.pop();
-			char* data = unit.data();
+			/* cread response 
+				process response - look at previous pa's
+				send new message (pop off of request buffer, cwrite) */
+			char res[m];
+			fifo_arr[index]->cread(res, m);
+			received++;
 
-			// ->cwrite(&data, unit.size()); 
+			vector<char> packet = a.at(index); //returns the vector of characters - data
+			char* data = packet.data();
+			Request* r = (Request*)data;
 
+			if(r->getType() == DATA_REQ_TYPE) { //data transfer
+				DataRequest* req = (DataRequest*) data;
+				double* reply = (double*) &res;
+				response res(req->person, *reply);
+		   		vector<char> v = vector<char>((char*)&res, (char*)&res + sizeof(response));
+		   		responseBuf->push(v);
+
+			}else if(r->getType() == FILE_REQ_TYPE) { //file transfer
+				//cout << "howdy" << endl;
+				FileRequest* f = (FileRequest*) r;
+				string name = f->getFileName();
+				int len = sizeof (FileRequest) + name.size()+1;
+
+				// chan->cwrite (data, len);
+				// fifo_arr[index]->cread(recvbuf, m);
+
+				FILE * file = fopen(("received/" + name).c_str(), "r+");
+				fseek(file, f->offset, SEEK_SET);
+				int write = fwrite(res, 1, f->length, file);
+				fclose(file);
+			}
+
+			if (!quit) {
+				vector<char> unit = req_buf->pop();
+				char* data2 = unit.data();
+				Request* r2 = (Request*)data2;
+
+				if (r2->getType() != QUIT_REQ_TYPE) {
+					sent++;
+					//cout << quit << " " << sent << " " << received << endl;
+
+					//write new requests
+					a.at(index) = unit; //updates to new packet
+					fifo_arr[index]->cwrite(data2, unit.size()); 
+				}
+				else {
+					quit = true;
+					cout << "quit received" << endl;
+				}
+			}
+
+			if(sent == received && quit == true) {
+				return;
+			}
 		} 
 	}
 }
@@ -92,17 +158,19 @@ void file_thread_function(string filename, int64 filelen, int buffercapacity, Bo
 	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
 	FileRequest* f = (FileRequest*) buf2;
 	char recvbuf[buffercapacity];
-	cout << "fileLenght: " << filelen << endl;
+	cout << "fileLength: " << filelen << endl;
 
 	FILE* of = fopen(("received/"+filename).c_str(), "w");
 	int write = fseek(of, filelen+1, SEEK_SET);
 	fclose(of);
+	//cout << "rem is :" << rem << endl;
 	while (rem > 0) { //while the remaining is greater than 0; 
 		f->length = min(rem, (int64)buffercapacity); //this line updates the length
 		vector<char> v = vector<char> ((char*)&buf2, (char*)&buf2 + len);
 		requestBuf->push(v);
 		rem -= f->length; //updates while loop
 		f->offset+=f->length; //updates another parameter in file request packet
+		//cout << rem << endl;
 	}
 }
 
@@ -125,7 +193,7 @@ int main(int argc, char *argv[]){
 	int n = 1; //number of data points you want to take
 	int m = 100; //buffer capacity
 	int h = 1; //number of histogram threads
-	int w = 1; //worker threads
+	int w = 1; //number of request channels
 	string filename = "";
 	int b = 100; // size of bounded buffer, note: this is different from another variable buffercapacity/m
 	// take all the arguments first because some of these may go to the server
@@ -177,20 +245,18 @@ int main(int argc, char *argv[]){
 		hc.add(hist);
 	}
 
-
 	struct timeval start, end;
     gettimeofday (&start, 0);
 
-	if(filename == "") {
-		signal(SIGALRM, signal_handler);
-		alarm(2);
-	}
+	// if(filename == "") {
+	// 	signal(SIGALRM, signal_handler);
+	// 	alarm(2);
+	// }
 
     /* Start all threads here */
 
 	//create threads
 	vector<thread> patients;
-	vector<thread> workers;
 	vector<thread> histograms;
 	for(int i = 1; i <= p; i++) {
 		// thread patient_thread(patient_thread_function, p, n, &request_buffer);
@@ -205,17 +271,21 @@ int main(int argc, char *argv[]){
 		chan.cwrite(&newchan, sizeof(newchan));
 		chan.cread(chanName, sizeof(chanName));
 		wchans[j] = new FIFORequestChannel(chanName, FIFORequestChannel::CLIENT_SIDE);
-
-		// thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m);
-		workers.push_back(thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m));
 	}
+
+	// thread worker_thread(worker_thread_function, &request_buffer, &response_buffer, wchans[j], m);
+	int new_w = w;
+	if ((w > (p * n)) && filename == "")
+		new_w = p * n;
+	thread worker(worker_thread_function, new_w, wchans, &request_buffer, m, &response_buffer);
+
 	for(int k = 0; k < h; k++) {
 		// thread histogram_thread(histogram_thread_function, &hc, &response_buffer);
 		histograms.push_back(thread(histogram_thread_function, &hc, &response_buffer));
 	}
 	//there will only be one file thread
 	if(filename != "") {
-
+		//cout << "processing file thread" << endl;
 		//find the length of the file
 		FileRequest fm (0,0);
 		int len = sizeof (FileRequest) + filename.size()+1;
@@ -226,7 +296,9 @@ int main(int argc, char *argv[]){
 		int64 filelen;
 		chan.cread (&filelen, sizeof(int64));
 		thread file_thread(file_thread_function, filename, filelen, m, &request_buffer);
+		//cout << "joining file thread" << endl;
 		file_thread.join();
+		//cout << "joined file thread" << endl;
 	}
 
 
@@ -241,15 +313,16 @@ int main(int argc, char *argv[]){
 	//push w quit messages to request buffer
 	Request q (QUIT_REQ_TYPE);
 	vector<char> quit_message = vector<char>((char*)&q, (char*)&q + sizeof(Request));
-	for(int j = 0; j < w; j++) {
-		request_buffer.push(quit_message);
-	}
+	request_buffer.push(quit_message);
 
 	cout << "quit requests sent" << endl;
 
 	//join worker threads
-	for(int k = 0; k < w; k++) {
-		workers.at(k).join();
+	worker.join();
+
+	// send quit messages to all channels
+	for (int a = 0; a < w; ++a) {
+		wchans[a]->cwrite(&q, sizeof(Request));
 	}
 
 	cout << "workers joined" << endl;
@@ -261,7 +334,7 @@ int main(int argc, char *argv[]){
 		response_buffer.push(v);
 	}
 
-	for(int j = 0;j < histograms.size(); j++) {
+	for(int j = 0; j < histograms.size(); j++) {
 		histograms.at(j).join();
 	}
 
@@ -280,7 +353,8 @@ int main(int argc, char *argv[]){
 	// delete all dynamic channels
 	for (int i = 0; i < w; ++i) {
 	 	delete wchans[i];
-	 }
+	}
+	delete[] wchans;
 	
 	// closing the channel    
     Request quit (QUIT_REQ_TYPE);

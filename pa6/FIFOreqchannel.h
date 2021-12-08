@@ -9,6 +9,7 @@ class FIFORequestChannel
 public:
 	enum Side {SERVER_SIDE, CLIENT_SIDE};
 	enum Mode {READ_MODE, WRITE_MODE};
+	int rfd;
 	
 private:
 	/*  The current implementation uses named pipes. */
@@ -18,7 +19,7 @@ private:
 	Side my_side;
 	
 	int wfd;
-	int rfd;
+	
 	
 	string pipe1, pipe2;
 	int open_pipe(string _pipe_name, int mode);
